@@ -100,10 +100,18 @@ def xmp_to_coordinates(fname):
         alt_rat = xmp.get_property(libxmp.consts.XMP_NS_EXIF, 'GPSAltitude')
         alt_ref = xmp.get_property(libxmp.consts.XMP_NS_EXIF, 'GPSAltitudeRef')
         alt = altitude_fixer(alt_rat, alt_ref)
-        gpstime = dateutil.parser.parse(xmp.get_property(libxmp.consts.XMP_NS_EXIF, 'GPSTimeStamp'))    
-        return [Position(timestamp=gpstime, latitude=lat, longitude=long, altitude=alt)]
+
+        best_time = None
+        for priority in ("GPSTimeStamp", "photoshop:DateCreated", "CreateDate"):
+            for f in libxmp.core.XMPIterator(xmp):
+                if priority in f[1]:
+                    best_time = dateutil.parser.parse(f[2])
+                    break
+            if best_time is not None:
+                break
+        return [Position(timestamp=best_time, latitude=lat, longitude=long, altitude=alt)]
     except libxmp.XMPError as e:
-        sys.stderr.write("Could not find necessary data in {}\n".format(fname))
+        sys.stderr.write("Error '{}'; could not find necessary data in {}\n".format(str(e), fname))
         return []
 
 def traverse(inputs):
