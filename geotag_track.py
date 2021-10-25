@@ -24,6 +24,7 @@ import sys
 import os
 from collections import namedtuple
 import dateutil.parser
+import datetime
 
 # Timestamp shall be in datetime.datetime UTC.
 # latitude and longitude shall be a floating point number representing degrees.
@@ -66,7 +67,7 @@ def gpx_to_coordinates(fname, args):
     return positions
 
 import libxmp
-def xmp_to_coordinates(fname):
+def xmp_to_coordinates(fname, shift=0.0):
     with open(fname, "r") as f:
         xmp = libxmp.XMPMeta()
         xmp.parse_from_str(f.read())
@@ -109,6 +110,7 @@ def xmp_to_coordinates(fname):
                     break
             if best_time is not None:
                 break
+        best_time = best_time + datetime.timedelta(seconds=shift)
         return [Position(timestamp=best_time, latitude=lat, longitude=long, altitude=alt)]
     except libxmp.XMPError as e:
         sys.stderr.write("Error '{}'; could not find necessary data in {}\n".format(str(e), fname))
@@ -131,6 +133,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Combine geotagged data into a single useful track.')
     parser.add_argument('input_folders_files', metavar='N', type=str, nargs='+',help='Path(s) to file(s) or directories.')
     parser.add_argument('--gpx-interval', nargs='?', type=float, help="Minimum interval between points in tracks [s].", default=1.0)
+    parser.add_argument('--xmp-shift', nargs='?', type=float, help="Shift non gps tracks by this time [s].", default=0.0)
     parser.add_argument('-o', '--output', default=None, help="Output file name.")
 
     args = parser.parse_args()
@@ -143,7 +146,7 @@ if __name__ == "__main__":
         if f.endswith(".gpx"):
             positions.extend(gpx_to_coordinates(f, args))
         if f.endswith(".xmp"):
-            positions.extend(xmp_to_coordinates(f))
+            positions.extend(xmp_to_coordinates(f, shift=args.xmp_shift))
 
     sys.stderr.write("Found {} coordinates.\n".format(len(positions)))
     positions.sort(key=lambda x: x.timestamp)
