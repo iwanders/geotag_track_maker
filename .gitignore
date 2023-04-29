@@ -1,1 +1,5 @@
 venv
+*priv*
+*.gpx
+*.kml
+*.gz

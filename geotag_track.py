@@ -25,6 +25,8 @@ import os
 from collections import namedtuple
 import dateutil.parser
 import datetime
+from tzwhere import tzwhere
+import pytz
 
 # Timestamp shall be in datetime.datetime UTC.
 # latitude and longitude shall be a floating point number representing degrees.
@@ -63,11 +65,16 @@ def gpx_to_coordinates(fname, args):
             flat.append(point)
 
     for point in flat:
-        positions.append(Position(timestamp=point.time, latitude=point.latitude, longitude=point.longitude, altitude=point.elevation))
+        # GPS tracks always in utc.
+        utc_time = datetime.datetime.combine(point.time.date(), point.time.time(), pytz.utc)
+        positions.append(Position(timestamp=utc_time, latitude=point.latitude, longitude=point.longitude, altitude=point.elevation))
     return positions
 
 import libxmp
-def xmp_to_coordinates(fname, shift=0.0):
+
+# This initialisation is expensive
+tzwherehelper = tzwhere.tzwhere()
+def xmp_to_coordinates(fname, shift=0.0, use_tzwhere=False):
     with open(fname, "r") as f:
         xmp = libxmp.XMPMeta()
         xmp.parse_from_str(f.read())
@@ -102,11 +109,41 @@ def xmp_to_coordinates(fname, shift=0.0):
         alt_ref = xmp.get_property(libxmp.consts.XMP_NS_EXIF, 'GPSAltitudeRef')
         alt = altitude_fixer(alt_rat, alt_ref)
 
+        already_utc = ("GPSTimeStamp",)
+
         best_time = None
-        for priority in ("GPSTimeStamp", "photoshop:DateCreated", "CreateDate"):
+        for priority in ("GPSTimeStamp", "photoshop:DateCreated", "CreateDate", "DateTimeOriginal"):
             for f in libxmp.core.XMPIterator(xmp):
+                # booo
                 if priority in f[1]:
-                    best_time = dateutil.parser.parse(f[2])
+                    tstring = f[2]
+                    if tstring[4] == ":" and tstring[7] == ":":
+                        # this majorly breaks the parser...
+                        tstring = tstring.replace(":", "-", 2)
+                    if priority in already_utc:
+                        best_time = dateutil.parser.parse(tstring)
+                    else:
+                        # print(f"f2: {f[2]}")
+                        best_time = dateutil.parser.parse(tstring)
+                        #print(f"Current local time {best_time} {repr(best_time)} for {fname}")
+                        # do the dance, make this local time utc.
+                        # https://stackoverflow.com/a/39457871
+                        # https://stackoverflow.com/a/19527596
+                        # get the timezone
+                        timezone_str = tzwherehelper.tzNameAt(lat, long)
+                        timezone = pytz.timezone(timezone_str)
+                        # make timezone aware datetime
+                        best_time = datetime.datetime.combine(best_time.date(), best_time.time(), timezone)
+                        # dt = datetime.datetime.now()
+                        # delta = timezone.utcoffset(best_time) #
+                        # print(f"delta: {delta}")
+                        # datetime.timedelta(0, 3600)
+                        # store into best_time as utc.
+                        best_time = best_time.astimezone(pytz.utc)
+                        # print(f"Delta: {delta}")
+                        # best_time = best_time + delta
+                        # dt = dt_tz.replace(tzinfo=None)
+                        #print(f"new utc time {best_time}")
                     break
             if best_time is not None:
                 break
@@ -134,6 +171,7 @@ if __name__ == "__main__":
     parser.add_argument('input_folders_files', metavar='N', type=str, nargs='+',help='Path(s) to file(s) or directories.')
     parser.add_argument('--gpx-interval', nargs='?', type=float, help="Minimum interval between points in tracks [s].", default=1.0)
     parser.add_argument('--xmp-shift', nargs='?', type=float, help="Shift non gps tracks by this time [s].", default=0.0)
+    parser.add_argument('--use-tzwhere', default=False, action="store_true", help="Use lat/lon to determine timezone to shift xmp files to utc.")
     parser.add_argument('-o', '--output', default=None, help="Output file name.")
 
     args = parser.parse_args()
@@ -146,11 +184,12 @@ if __name__ == "__main__":
         if f.endswith(".gpx"):
             positions.extend(gpx_to_coordinates(f, args))
         if f.endswith(".xmp"):
-            positions.extend(xmp_to_coordinates(f, shift=args.xmp_shift))
+            positions.extend(xmp_to_coordinates(f, shift=args.xmp_shift, use_tzwhere=args.use_tzwhere))
 
     sys.stderr.write("Found {} coordinates.\n".format(len(positions)))
     positions.sort(key=lambda x: x.timestamp)
 
+    # print(positions)
 
     gpx = gpxpy.gpx.GPX()
 
