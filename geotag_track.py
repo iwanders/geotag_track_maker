@@ -122,6 +122,7 @@ def xmp_to_coordinates(fname, shift=0.0, use_tzwhere=False):
                         tstring = tstring.replace(":", "-", 2)
                     if priority in already_utc:
                         best_time = dateutil.parser.parse(tstring)
+                        best_time = datetime.datetime.combine(best_time.date(), best_time.time(), pytz.utc)
                     else:
                         # print(f"f2: {f[2]}")
                         best_time = dateutil.parser.parse(tstring)
