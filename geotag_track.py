@@ -174,6 +174,7 @@ if __name__ == "__main__":
     parser.add_argument('--xmp-shift', nargs='?', type=float, help="Shift non gps tracks by this time [s].", default=0.0)
     parser.add_argument('--use-tzwhere', default=False, action="store_true", help="Use lat/lon to determine timezone to shift xmp files to utc.")
     parser.add_argument('-o', '--output', default=None, help="Output file name.")
+    parser.add_argument('-s', '--split-tracks', default=False, action="store_true", help="Create disjoint tracks instead of connecting them, this treats xmp data as independent tracks.")
 
     args = parser.parse_args()
 
@@ -182,13 +183,14 @@ if __name__ == "__main__":
 
     positions = []
     for f in files:
+        basename = os.path.basename(f)
         if f.endswith(".gpx"):
-            positions.extend(gpx_to_coordinates(f, args))
+            positions.append((basename, gpx_to_coordinates(f, args)))
         if f.endswith(".xmp"):
-            positions.extend(xmp_to_coordinates(f, shift=args.xmp_shift, use_tzwhere=args.use_tzwhere))
+            positions.append((basename, xmp_to_coordinates(f, shift=args.xmp_shift, use_tzwhere=args.use_tzwhere)))
 
-    sys.stderr.write("Found {} coordinates.\n".format(len(positions)))
-    positions.sort(key=lambda x: x.timestamp)
+    sys.stderr.write("Found {} tracks with {} points.\n".format(len(positions), sum(len(z) for z in positions)))
+    positions.sort(key=lambda x: x[1][0].timestamp)
 
     # print(positions)
 
@@ -203,9 +205,19 @@ if __name__ == "__main__":
     gpx_track.segments.append(gpx_segment)
 
     # Create points in the gpx segment.
-    for p in positions:
-        gpxpoint = gpxpy.gpx.GPXTrackPoint(latitude=p.latitude, longitude=p.longitude, elevation=p.altitude, time=p.timestamp);
-        gpx_segment.points.append(gpxpoint)
+    for basename, segm in positions:
+        gpx_track.name = basename
+        for p in segm:
+            gpxpoint = gpxpy.gpx.GPXTrackPoint(latitude=p.latitude, longitude=p.longitude, elevation=p.altitude, time=p.timestamp);
+            gpx_segment.points.append(gpxpoint)
+        if args.split_tracks:
+            gpx_track = gpxpy.gpx.GPXTrack()
+            gpx.tracks.append(gpx_track)
+
+            # create segment in the track.
+            gpx_segment = gpxpy.gpx.GPXTrackSegment()
+            gpx_track.segments.append(gpx_segment)
+            
 
     if (args.output):
         with open(args.output, "w") as f:
