@@ -18,4 +18,4 @@ exiv2 ex -l metadata_export_dir -e X *.jpg
 ```
 
 ## License
-[MIT][./license.txt].
+[MIT](./LICENSE.txt).
