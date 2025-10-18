@@ -3,3 +3,5 @@ venv
 *.gpx
 *.kml
 *.gz
+__pycache__
+.venv

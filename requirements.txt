@@ -1,8 +1,8 @@
-gpxpy==1.3.4
-numpy==2.3.4
-python-dateutil==2.7.5
-python-xmp-toolkit==2.0.1
-pytz==2018.7
-shapely==2.1.2
-six==1.11.0
-tzwhere==3.0.3
+gpxpy
+numpy
+python-dateutil
+python-xmp-toolkit
+pytz
+shapely
+six
+tzwhere

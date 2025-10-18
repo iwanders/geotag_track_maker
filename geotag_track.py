@@ -27,6 +27,7 @@ import dateutil.parser
 import datetime
 from tzwhere import tzwhere
 import pytz
+import libxmp
 
 # Timestamp shall be in datetime.datetime UTC.
 # latitude and longitude shall be a floating point number representing degrees.
@@ -70,10 +71,9 @@ def gpx_to_coordinates(fname, args):
         positions.append(Position(timestamp=utc_time, latitude=point.latitude, longitude=point.longitude, altitude=point.elevation))
     return positions
 
-import libxmp
 
 # This initialisation is expensive
-tzwherehelper = tzwhere.tzwhere()
+#tzwherehelper = tzwhere.tzwhere()
 def xmp_to_coordinates(fname, shift=0.0, use_tzwhere=False):
     with open(fname, "r") as f:
         xmp = libxmp.XMPMeta()
@@ -190,6 +190,7 @@ if __name__ == "__main__":
             positions.append((basename, xmp_to_coordinates(f, shift=args.xmp_shift, use_tzwhere=args.use_tzwhere)))
 
     sys.stderr.write("Found {} tracks with {} points.\n".format(len(positions), sum(len(z) for z in positions)))
+    positions = [p for p in positions if p[1]]
     positions.sort(key=lambda x: x[1][0].timestamp)
 
     # print(positions)
