@@ -12,9 +12,9 @@ can then be used to geotag photos made with a camera or any device that doesn't 
 Use this to extract metadata from iOS files, since they always have a location:
 
 ```bash
-mkdir metadata_export_dir
-exiv2 ex -l metadata_export_dir -e X *.jpg
-# or exiv2 ex -e X *.jpeg for just in current directory.
+mkdir metadata
+exiv2 --location ./metadata/ -e X *.HEIC
+# or exiv2-e X *.HEIC for just in current directory.
 ```
 
 ## License
