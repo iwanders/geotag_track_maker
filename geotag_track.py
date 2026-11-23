@@ -72,12 +72,13 @@ def gpx_to_coordinates(fname, args):
     return positions
 
 
-# This initialisation is expensive
-#tzwherehelper = tzwhere.tzwhere()
+# This initialisation is expensive, so ensure it is created only once.
+tzwherehelper = None
 def xmp_to_coordinates(fname, shift=0.0, use_tzwhere=False):
     with open(fname, "r") as f:
         xmp = libxmp.XMPMeta()
         xmp.parse_from_str(f.read())
+
 
     def coordinate_fixer(coord_str):
         # https://gis.stackexchange.com/questions/136925/#comment265294_136928
@@ -131,7 +132,15 @@ def xmp_to_coordinates(fname, shift=0.0, use_tzwhere=False):
                         # https://stackoverflow.com/a/39457871
                         # https://stackoverflow.com/a/19527596
                         # get the timezone
+                        global tzwherehelper
+                        if tzwherehelper is None:
+                            tzwherehelper = tzwhere.tzwhere()
                         timezone_str = tzwherehelper.tzNameAt(lat, long)
+                        if timezone_str is None:
+                            # COuldn't find a timezone, so no best time yet.
+                            print(f"Failed to find timezone {timezone_str} for {lat}, {long} at {fname}")
+                            best_time = None
+                            break
                         timezone = pytz.timezone(timezone_str)
                         # make timezone aware datetime
                         best_time = datetime.datetime.combine(best_time.date(), best_time.time(), timezone)
@@ -148,6 +157,8 @@ def xmp_to_coordinates(fname, shift=0.0, use_tzwhere=False):
                     break
             if best_time is not None:
                 break
+        if best_time is None:
+            return []
         best_time = best_time + datetime.timedelta(seconds=shift)
         return [Position(timestamp=best_time, latitude=lat, longitude=long, altitude=alt)]
     except libxmp.XMPError as e:
