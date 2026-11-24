@@ -79,6 +79,8 @@ def xmp_to_coordinates(fname, shift=0.0, use_tzwhere=False):
         xmp = libxmp.XMPMeta()
         xmp.parse_from_str(f.read())
 
+    #if not "IMG_7879" in fname:
+    #    return []
 
     def coordinate_fixer(coord_str):
         # https://gis.stackexchange.com/questions/136925/#comment265294_136928
@@ -145,8 +147,10 @@ def xmp_to_coordinates(fname, shift=0.0, use_tzwhere=False):
                         # make timezone aware datetime
                         best_time = datetime.datetime.combine(best_time.date(), best_time.time(), timezone)
                         # dt = datetime.datetime.now()
-                        # delta = timezone.utcoffset(best_time) #
-                        # print(f"delta: {delta}")
+                        delta = timezone.utcoffset(best_time) #
+                        # Floor to the nearest whole hour
+                        #delta = (delta // datetime.timedelta(hours=1)) * datetime.timedelta(hours=1)
+                        #print(f"delta: {delta}, {type(delta)}")
                         # datetime.timedelta(0, 3600)
                         # store into best_time as utc.
                         best_time = best_time.astimezone(pytz.utc)
@@ -178,12 +182,29 @@ def traverse(inputs):
                     found_files.add(entry)
     return found_files
 
+
+def analyse_positions(gpx_positions, xmp_positions):
+    # Didn't quite need this, as I realised the problem...
+    for z in range(-12, 12):
+        positions = []
+        for p in xmp_positions:
+            positions.append(Position(timestamp=p.timestamp + datetime.timedelta(seconds=z * 3600), latitude=p.latitude, longitude=p.longitude, altitude=p.altitude))
+        for p in gpx_positions:
+            positions.append(p)
+
+        positions.sort(key=lambda x: x.timestamp)
+        # determine length
+        #print(positions)
+
+    pass
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Combine geotagged data into a single useful track.')
     parser.add_argument('input_folders_files', metavar='N', type=str, nargs='+',help='Path(s) to file(s) or directories.')
     parser.add_argument('--gpx-interval', nargs='?', type=float, help="Minimum interval between points in tracks [s].", default=1.0)
-    parser.add_argument('--xmp-shift', nargs='?', type=float, help="Shift non gps tracks by this time [s].", default=0.0)
+    parser.add_argument('--xmp-shift', nargs='?', type=float, help="Shift non gps tracks by this time [s], this can be used to solve small time differences like 360s for 6 minutes.", default=0.0)
     parser.add_argument('--use-tzwhere', default=False, action="store_true", help="Use lat/lon to determine timezone to shift xmp files to utc.")
+    parser.add_argument('--no-rip-tracks', default=True, action="store_false", dest="rip_tracks", help="Ensure tracks stay consecutive instead of interleaving all data.")
     parser.add_argument('-o', '--output', default=None, help="Output file name.")
     parser.add_argument('-s', '--split-tracks', default=False, action="store_true", help="Create disjoint tracks instead of connecting them, this treats xmp data as independent tracks.")
 
@@ -193,16 +214,32 @@ if __name__ == "__main__":
     sys.stderr.write("Found {} files.\n".format(len(files)))
 
     positions = []
+    gpx_positions = []
+    xmp_positions = []
     for f in files:
         basename = os.path.basename(f)
         if f.endswith(".gpx"):
-            positions.append((basename, gpx_to_coordinates(f, args)))
+            gpx_coordinates = gpx_to_coordinates(f, args)
+            positions.append((basename, gpx_coordinates))
+            gpx_positions.extend(gpx_coordinates)
         if f.endswith(".xmp"):
-            positions.append((basename, xmp_to_coordinates(f, shift=args.xmp_shift, use_tzwhere=args.use_tzwhere)))
+            xmp_coords = xmp_to_coordinates(f, shift=args.xmp_shift, use_tzwhere=args.use_tzwhere)
+            xmp_positions.extend(xmp_coords)
+            positions.append((basename, xmp_coords))
+
+    #analyse_positions(gpx_positions, xmp_positions)
 
     sys.stderr.write("Found {} tracks with {} points.\n".format(len(positions), sum(len(z) for z in positions)))
     positions = [p for p in positions if p[1]]
     positions.sort(key=lambda x: x[1][0].timestamp)
+
+    if args.rip_tracks:
+        all_points = []
+        for basename, segm in positions:
+            all_points.extend(segm)
+        all_points.sort(key=lambda x: x.timestamp)
+        positions = [("ripped", all_points)]
+        
 
     # print(positions)
 
